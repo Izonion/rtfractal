@@ -10,10 +10,10 @@ use winit::window::WindowBuilder;
 use winit_input_helper::WinitInputHelper;
 use std::time::{Instant, Duration};
 
-// const WIDTH: u32 = 800;
-// const HEIGHT: u32 = 600;
-const WIDTH: u32 = 320;
-const HEIGHT: u32 = 240;
+const WIDTH: u32 = 800;
+const HEIGHT: u32 = 600;
+// const WIDTH: u32 = 320;
+// const HEIGHT: u32 = 240;
 const BOX_SIZE: i16 = 17;
 
 /// Representation of the application state. In this example, a box will bounce around the screen.
@@ -45,6 +45,14 @@ fn main() -> Result<(), Error> {
     };
     let mut world = World::new();
 
+    let clear_buffer = {
+        let mut clear_buffer = [0u8; (WIDTH * HEIGHT * 4) as usize];
+        for i in 0..(WIDTH * HEIGHT) as usize {
+            clear_buffer[i * 4..i * 4 + 4].copy_from_slice(&[0x48, 0xb2, 0xe8, 0xff]);
+        }
+        Box::new(clear_buffer) as Box<[u8]>
+    };
+
     let mut last_frame = Instant::now();
     let mut cumulative_delta = Duration::from_secs_f64(0.0);
     let mut frame_count = 0;
@@ -52,7 +60,7 @@ fn main() -> Result<(), Error> {
     event_loop.run(move |event, _, control_flow| {
         // Draw the current frame
         if let Event::RedrawRequested(_) = event {
-            world.draw(pixels.get_frame());
+            world.draw(&clear_buffer, pixels.get_frame());
             if pixels
                 .render()
                 .map_err(|e| error!("pixels.render() failed: {}", e))
@@ -98,7 +106,7 @@ impl World {
     /// Create a new `World` instance that can draw a moving box.
     fn new() -> Self {
         Self {
-            box_x: 24,
+            box_x: 23,
             box_y: 16,
             velocity_x: 10,
             velocity_y: 10,
@@ -121,20 +129,16 @@ impl World {
     /// Draw the `World` state to the frame buffer.
     ///
     /// Assumes the default texture format: `wgpu::TextureFormat::Rgba8UnormSrgb`
-    fn draw(&self, frame: &mut [u8]) {
+    fn draw(&self, clear_buffer: &Box<[u8]>, frame: &mut [u8]) {
         // Can extend to not have to make a new vec every time
-        let mut pixels = frame.chunks_exact_mut(4).collect::<Vec<&mut [u8]>>();
+        frame.copy_from_slice(clear_buffer);
+        let mut grid = PixelGrid(frame);
         // pixels.iter_mut().for_each(|pixel| pixel.copy_from_slice(&[0x48, 0xb2, 0xe8, 0xff]));
         for inbox_x in 0..BOX_SIZE {
             for inbox_y in 0..BOX_SIZE {
                 let x = self.box_x + inbox_x;
                 let y = self.box_y + inbox_y;
-                let x = (x as u32).clamp(0, WIDTH);
-                let y = (y as u32).clamp(0, HEIGHT) * WIDTH;
-                let i = x as usize + y as usize;
-                if let Some(pixel) = pixels.get_mut(i) {
-                    pixel.copy_from_slice(&[0x5e, 0x48, 0xe8, 0xff]);
-                }
+                grid.set_pixel(x, y, &[0x5e, 0x48, 0xe8, 0xff]);
             }
         }
         // for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
@@ -156,3 +160,27 @@ impl World {
         // }
     }
 }
+
+struct PixelGrid<'a>(&'a mut [u8]);
+
+impl<'a> PixelGrid<'a> {
+    fn set_pixel(&mut self, x: i16, y: i16, pixel: &[u8; 4]) {
+        let x = (x as u32).clamp(0, WIDTH - 1);
+        let y = (y as u32).clamp(0, HEIGHT - 1);
+        let i = (x as usize + (y * WIDTH) as usize) * 4;
+        self.0[i..i + 4].copy_from_slice(pixel);
+    }
+}
+
+struct Vec2 {
+    x: f32,
+    y: f32,
+}
+
+struct ScreenTransform {
+    position: Vec2,
+    rotation: f32,
+    scale: f32,
+    alpha: u8,
+}
+

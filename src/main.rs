@@ -156,10 +156,10 @@ impl ScreenTransform {
             for line_width in 0..10 {
                 grid.set_pixel_transformed( pixel::Vec2::new(x, -height / 2.0 + (line_width as f32) / self.transform.scale),
                                             &self.transform,
-                                            &[0x00, 0x00, 0x00, 0xff]);
+                                            &[0x00, 0x00, 0x00]);
                 grid.set_pixel_transformed( pixel::Vec2::new(x, height / 2.0 - (line_width as f32) / self.transform.scale),
                                             &self.transform,
-                                            &[0x00, 0x00, 0x00, 0xff]);
+                                            &[0x00, 0x00, 0x00]);
             }
             x += self.transform.scale;
         }
@@ -168,33 +168,13 @@ impl ScreenTransform {
             for line_width in 0..10 {
                 grid.set_pixel_transformed( pixel::Vec2::new(-width / 2.0 + (line_width as f32) / self.transform.scale, y),
                                             &self.transform,
-                                            &[0x00, 0x00, 0x00, 0xff]);
+                                            &[0x00, 0x00, 0x00]);
                 grid.set_pixel_transformed( pixel::Vec2::new(width / 2.0 - (line_width as f32) / self.transform.scale, y),
                                             &self.transform,
-                                            &[0x00, 0x00, 0x00, 0xff]);
+                                            &[0x00, 0x00, 0x00]);
             }
             y += self.transform.scale;
         }
-        // let y = 0;
-        // for x in (0..(10.0 * precision_scale) as i16).chain(((width - 10.0) * precision_scale) as i16..(width * precision_scale) as i16) {
-        //     for y in (10.0 * precision_scale) as i16..((height - 10.0) * precision_scale) as i16 {
-        //         let transformed = transform(x as f32 / precision_scale, y as f32 / precision_scale, &self);
-        //         grid.set_pixel( transformed.0,
-        //                         transformed.1,
-        //                         &[0x00, 0x00, 0x00, self.alpha]);
-        //     }
-        // }
-
-        // for x in 0..(width * precision_scale) as i16 {
-        //     for y in 0..(height * precision_scale) as i16 {
-        //         let tex_x = x as f32 / width / precision_scale * WIDTH as f32;
-        //         let tex_y = y as f32 / height / precision_scale * HEIGHT as f32;
-        //         let transformed = transform(x as f32 / precision_scale, y as f32 / precision_scale, &self);
-        //         grid.set_pixel( transformed.0,
-        //                         transformed.1,
-        //                         &[if (tex_x) as i16 % 100 > 50 {0xff} else {0x00}, if (tex_y) as i16 % 100 > 50 {0xff} else {0x00}, 0x00, self.alpha]);
-        //     }
-        // }
     }
 
     fn mouse_input(&mut self, pos: Option<(f32, f32)>) {

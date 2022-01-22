@@ -5,20 +5,22 @@ use crate::{WIDTH, HEIGHT};
 pub struct PixelGrid<'a>(pub &'a mut [u8]);
 
 impl<'a> PixelGrid<'a> {
-    pub fn set_pixel(&mut self, point: Vec2, pixel: &[u8; 4]) {
+    pub fn set_pixel(&mut self, point: Vec2, pixel: &[u8; 3]) {
         let x = point.x.clamp(0.0, (WIDTH - 1) as f32) as u32;
         let y = point.y.clamp(0.0, (HEIGHT - 1) as f32) as u32;
         let i = (x as usize + (y * WIDTH) as usize) * 4;
-        self.0[i..i + 4].copy_from_slice(pixel);
+        self.0[i..i + 2].copy_from_slice(pixel);
     }
 
-    pub fn set_pixel_transformed(&mut self, point: Vec2, transform: &Transform, pixel: &[u8; 4]) {
+    pub fn set_pixel_transformed(&mut self, point: Vec2, transform: &Transform, pixel: &[u8; 3]) {
     	let point = transform.apply(point);
         let x = point.x.clamp(0.0, (WIDTH - 1) as f32) as u32;
         let y = point.y.clamp(0.0, (HEIGHT - 1) as f32) as u32;
         let i = (x as usize + (y * WIDTH) as usize) * 4;
-        self.0[i..i + 4].copy_from_slice(&[pixel[0], pixel[1], pixel[2],
-        	(((pixel[3] as f32 / 256.0) * (transform.alpha as f32 / 256.0)) * 256.0) as u8]);
+        let alpha = transform.alpha as f32 / 255.0;
+        self.0[i + 0] = (((self.0[i + 0] as f32 / 255.0) * (1.0 - alpha) + (pixel[0] as f32 / 255.0) * alpha) * 255.0) as u8;
+        self.0[i + 1] = (((self.0[i + 1] as f32 / 255.0) * (1.0 - alpha) + (pixel[1] as f32 / 255.0) * alpha) * 255.0) as u8;
+        self.0[i + 2] = (((self.0[i + 2] as f32 / 255.0) * (1.0 - alpha) + (pixel[2] as f32 / 255.0) * alpha) * 255.0) as u8;
     }
 }
 

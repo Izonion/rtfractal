@@ -37,7 +37,7 @@ fn main() -> Result<(), Error> {
 			.unwrap()
 	};
 
-	// let mut pixels = {
+	let mut pixels = {
 		let window_size = window.inner_size();
 		let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
 		Pixels::new(WIDTH, HEIGHT, surface_texture)?
@@ -129,22 +129,32 @@ impl World {
 	/// Create a new `World` instance that can draw a moving box.
 	fn new() -> Self {
 		let mut transforms = Vec::new();
+		for _ in 0..4 {
 		transforms.push(ScreenTransform { transform: pixel::Transform {
-			position: pixel::Vec2::new(WIDTH as f32 / 2.0, HEIGHT as f32 / 2.0),
-			rotation: 0.0,
-			scale: 0.6,
-			alpha: 0xff,
-		}, hovering: None, grabbing: None});
+				position: pixel::Vec2::new(WIDTH as f32 / 2.0, HEIGHT as f32 / 2.0),
+				rotation: 0.0,
+				scale: 0.6,
+				alpha: 0xff,
+			}, hovering: None, grabbing: None, scale_start: None, controls_visible: false});
+		}
 		Self {
 			transforms,
 		}
 	}
 
 	fn update(&mut self, mouse_pos: Option<(f32, f32)>, mouse_state: MouseClickState) {
-		for transform in &mut self.transforms {
+		let mut first_one = None;
+		for (i, transform) in self.transforms.iter_mut().enumerate() {
 			if let Some((x, y)) = mouse_pos {
-				transform.mouse_input(pixel::Vec2::new(x, y), mouse_state);
+				if transform.mouse_input(pixel::Vec2::new(x, y), mouse_state) {
+					first_one = Some(i);
+					break
+				}
 			}
+		}
+		if let Some(i) = first_one {
+			let top = self.transforms.remove(i);
+			self.transforms.insert(0, top);
 		}
 	}
 
@@ -171,12 +181,11 @@ enum Hoverables {
 
 struct ScreenTransform {
 	transform: pixel::Transform,
+	controls_visible: bool,
 	hovering: Option<Hoverables>,
 	grabbing: Option<Hoverables>,
+	scale_start: Option<pixel::Vec2>,
 }
-
-const ROTATE_HOVERABLE: [f32; 4] = [-85.0, -200.0, 85.0, -140.0]; // Two bounding points
-const TRANSLATE_HOVERABLE: [f32; 4] = [-85.0, -200.0, 85.0, -140.0]; // Two bounding points
 
 impl ScreenTransform {
 	fn draw(&self, grid: &mut pixel::PixelGrid) {
@@ -214,6 +223,8 @@ impl ScreenTransform {
 			y += self.transform.scale;
 		}
 
+		if !self.controls_visible { return }
+
 		let rotate_color =
 			if self.grabbing == Some(Hoverables::Rotate) { &clicking_color }
 			else if self.hovering == Some(Hoverables::Rotate) { &hovering_color }
@@ -222,25 +233,74 @@ impl ScreenTransform {
 			let outer_arc = (100.0*100.0 - x as f32 * x as f32).sqrt() as i16;
 			let inner_arc = (75.0*75.0 - x as f32 * x as f32).sqrt() as i16;
 			for y in inner_arc.max(50)..outer_arc {
-				grid.set_pixel_transformed( pixel::Vec2::new(x as f32, -y as f32 - 100.0),
+				grid.set_pixel_transformed( pixel::Vec2::new(x as f32, -y as f32 - height / 2.0 + 100.0 + 15.0 / self.transform.scale),
 											&self.transform,
 											&rotate_color);
 			}
 		}
 		for x in 40..85 {
 			for y in 40..x {
-				grid.set_pixel_transformed( pixel::Vec2::new(x as f32, -y as f32 - 100.0),
+				grid.set_pixel_transformed( pixel::Vec2::new(x as f32, -y as f32 - height / 2.0 + 100.0 + 15.0 / self.transform.scale),
 											&self.transform,
 											&rotate_color);
-				grid.set_pixel_transformed( pixel::Vec2::new(-x as f32, -y as f32 - 100.0),
+				grid.set_pixel_transformed( pixel::Vec2::new(-x as f32, -y as f32 - height / 2.0 + 100.0 + 15.0 / self.transform.scale),
 											&self.transform,
 											&rotate_color);
 			}
 		}
+
+		let translate_color =
+			if self.grabbing == Some(Hoverables::Translate) { &clicking_color }
+			else if self.hovering == Some(Hoverables::Translate) { &hovering_color }
+			else { &hoverable_color };
+		for x in -10..10 {
+			for y in -40..40 {
+				grid.set_pixel_transformed( pixel::Vec2::new(x as f32, y as f32),
+											&self.transform,
+											&translate_color);
+				grid.set_pixel_transformed( pixel::Vec2::new(y as f32, x as f32),
+											&self.transform,
+											&translate_color);
+			}
+		}
+		for x in -25i32..25 {
+			for y in 0..(25 - x.abs()) {
+				grid.set_pixel_transformed( pixel::Vec2::new(x as f32, (y + 40) as f32),
+											&self.transform,
+											&translate_color);
+				grid.set_pixel_transformed( pixel::Vec2::new(x as f32, -(y + 40) as f32),
+											&self.transform,
+											&translate_color);
+				grid.set_pixel_transformed( pixel::Vec2::new((y + 40) as f32, x as f32),
+											&self.transform,
+											&translate_color);
+				grid.set_pixel_transformed( pixel::Vec2::new(-(y + 40) as f32, x as f32),
+											&self.transform,
+											&translate_color);
+			}
+		}
+
+		let scale_color =
+			if self.grabbing == Some(Hoverables::Scale) { &clicking_color }
+			else if self.hovering == Some(Hoverables::Scale) { &hovering_color }
+			else { &hoverable_color };
+		for x in 0..80 {
+			for y in 60..80 {
+				grid.set_pixel_transformed( pixel::Vec2::new(x as f32 + width / 2.0 - 80.0 - 15.0 / self.transform.scale, y as f32 + height / 2.0 - 80.0 - 15.0 / self.transform.scale),
+											&self.transform,
+											&scale_color);
+				grid.set_pixel_transformed( pixel::Vec2::new(y as f32 + width / 2.0 - 80.0 - 15.0 / self.transform.scale, x as f32 + height / 2.0 - 80.0 - 15.0 / self.transform.scale),
+											&self.transform,
+											&scale_color);
+			}
+		}
 	}
 
-	fn mouse_input(&mut self, pos: pixel::Vec2, mouse_state: MouseClickState) {
+	fn mouse_input(&mut self, pos: pixel::Vec2, mouse_state: MouseClickState) -> bool {
+		let width = WIDTH as f32;
+		let height = HEIGHT as f32;
 		let local_pos = self.transform.apply_inverse(pos);
+
 		if let Some(grabbing) = self.grabbing {
 			self.hovering = None;
 			match grabbing {
@@ -253,6 +313,14 @@ impl ScreenTransform {
 					};
 					self.transform.rotation = angle;
 				},
+				Hoverables::Translate => {
+					self.transform.position = pos;
+				},
+				Hoverables::Scale => {
+					let current_distance = pos - self.transform.position;
+					self.transform.scale = current_distance.magnitude() * WIDTH as f32 / HEIGHT as f32 / 540.0;
+					self.transform.scale = self.transform.scale.max(0.1).min(1.0);
+				},
 				_ => (),
 			}
 			match mouse_state {
@@ -261,11 +329,22 @@ impl ScreenTransform {
 				},
 				_ => (),
 			}
+			return true;
+		}
+
+		if local_pos.x < -width / 2.0 || local_pos.x > width / 2.0 ||
+			local_pos.y < -height / 2.0 || local_pos.y > height / 2.0 {
+			self.controls_visible = false;
+			return false;
 		} else {
-			if 		local_pos.x > ROTATE_HOVERABLE[0] &&
-					local_pos.x < ROTATE_HOVERABLE[2] &&
-					local_pos.y > ROTATE_HOVERABLE[1] &&
-					local_pos.y < ROTATE_HOVERABLE[3] {
+			self.controls_visible = true;
+		}
+
+		{
+			if 		local_pos.x > -85.0 &&
+					local_pos.x < 85.0 &&
+					local_pos.y > -height / 2.0 + 15.0 / self.transform.scale &&
+					local_pos.y < -height / 2.0 + 70.0 + 15.0 / self.transform.scale {
 				self.hovering = Some(Hoverables::Rotate);
 				match mouse_state {
 					MouseClickState::Pressed => {
@@ -273,12 +352,33 @@ impl ScreenTransform {
 					},
 					_ => (),
 				}
-			} else if 	local_pos.x > ROTATE_HOVERABLE[0] &&
-						local_pos.x < ROTATE_HOVERABLE[2] &&
-						local_pos.y > ROTATE_HOVERABLE[1] &&
-						local_pos.y < ROTATE_HOVERABLE[3] else {
+			} else if 	local_pos.x > -65.0 &&
+						local_pos.x < 65.0 &&
+						local_pos.y > -65.0 &&
+						local_pos.y < 65.0 {
+				self.hovering = Some(Hoverables::Translate);
+				match mouse_state {
+					MouseClickState::Pressed => {
+						self.grabbing = Some(Hoverables::Translate);
+					},
+					_ => (),
+				}
+			} else if 	local_pos.x > width / 2.0 - 85.0 - 15.0 / self.transform.scale &&
+						local_pos.x < width / 2.0 - 0.0 - 15.0 / self.transform.scale &&
+						local_pos.y > height / 2.0 - 85.0 - 15.0 / self.transform.scale &&
+						local_pos.y < height / 2.0 - 0.0 - 15.0 / self.transform.scale {
+				self.hovering = Some(Hoverables::Scale);
+				match mouse_state {
+					MouseClickState::Pressed => {
+						self.grabbing = Some(Hoverables::Scale);
+						self.scale_start = Some(pos);
+					},
+					_ => (),
+				}
+			} else {
 				self.hovering = None;
 			}
 		}
+		true
 	}
 }

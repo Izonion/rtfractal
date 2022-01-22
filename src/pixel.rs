@@ -68,12 +68,16 @@ impl Vec2 {
 		}
 	}
 
-	pub fn normalized(&self) -> Self {
-		let magnitude = (self.x * self.x + self.y * self.y).sqrt();
+	fn normalized(&self) -> Self {
+		let magnitude = self.magnitude();
 		Self {
 			x: self.x / magnitude,
 			y: self.y / magnitude,
 		}
+	}
+
+	pub fn magnitude(&self) -> f32 {
+		(self.x * self.x + self.y * self.y).sqrt()
 	}
 }
 

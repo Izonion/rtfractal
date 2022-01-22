@@ -10,6 +10,8 @@ use winit::window::WindowBuilder;
 use winit_input_helper::WinitInputHelper;
 use std::time::{Instant, Duration};
 
+mod pixel;
+
 const WIDTH: u32 = 800;
 const HEIGHT: u32 = 600;
 // const WIDTH: u32 = 320;
@@ -92,8 +94,12 @@ fn main() -> Result<(), Error> {
                 pixels.resize_surface(size.width, size.height);
             }
 
+            if input.mouse_pressed(0) {
+
+            }
+
             // Update internal state and request a redraw
-            world.update();
+            world.update(input.mouse());
             window.request_redraw();
         }
     });
@@ -103,20 +109,23 @@ impl World {
     /// Create a new `World` instance that can draw a moving box.
     fn new() -> Self {
         let mut transforms = Vec::new();
-        transforms.push(ScreenTransform {
-            position: Vec2 { x: WIDTH as f32 / 2.0, y: HEIGHT as f32 / 2.0 },
+        transforms.push(ScreenTransform { transform: pixel::Transform {
+            position: pixel::Vec2::new(WIDTH as f32 / 2.0, HEIGHT as f32 / 2.0),
             rotation: 1.25,
             scale: 0.6,
-            alpha: 0xff
-        });
+            alpha: 0xff,
+        }});
         Self {
             transforms,
         }
     }
 
-    fn update(&mut self) {
-        // for mut transform in &mut self.transforms {
-        // }
+    fn update(&mut self, mouse_pos: Option<(f32, f32)>) {
+        for mut transform in &mut self.transforms {
+            transform.mouse_input(mouse_pos);
+            transform.transform.rotation -= 0.001;
+            transform.transform.scale = 0.001f32.max(transform.transform.scale - 0.001);
+        }
     }
 
     /// Draw the `World` state to the frame buffer.
@@ -125,78 +134,56 @@ impl World {
     fn draw(&self, clear_buffer: &Box<[u8]>, frame: &mut [u8]) {
         // Can extend to not have to make a new vec every time
         frame.copy_from_slice(clear_buffer);
-        let mut grid = PixelGrid(frame);
+        let mut grid = pixel::PixelGrid(frame);
         for transform in &self.transforms {
             transform.draw(&mut grid);
         }
     }
 }
 
-struct PixelGrid<'a>(&'a mut [u8]);
-
-impl<'a> PixelGrid<'a> {
-    fn set_pixel(&mut self, x: i16, y: i16, pixel: &[u8; 4]) {
-        let x = (x as u32).clamp(0, WIDTH - 1);
-        let y = (y as u32).clamp(0, HEIGHT - 1);
-        let i = (x as usize + (y * WIDTH) as usize) * 4;
-        self.0[i..i + 4].copy_from_slice(pixel);
-    }
-}
-
-struct Vec2 {
-    x: f32,
-    y: f32,
-}
-
 struct ScreenTransform {
-    position: Vec2,
-    rotation: f32,
-    scale: f32,
-    alpha: u8,
+    transform: pixel::Transform,
 }
 
 impl ScreenTransform {
-    fn draw(&self, grid: &mut PixelGrid) {
-        let width = WIDTH as f32 * self.scale;
-        let height = HEIGHT as f32 * self.scale;
-
-        fn transform(x: f32, y: f32, tr: &ScreenTransform) -> (i16, i16) {
-            let width = WIDTH as f32 * tr.scale;
-            let height = HEIGHT as f32 * tr.scale;
-            let x = x - width / 2.0;
-            let y = y - height / 2.0;
-            let sin = tr.rotation.sin();
-            let cos = tr.rotation.cos();
-            (
-                (
-                    x * cos - y * sin +
-                    tr.position.x
-                ) as i16,
-                (
-                    y * cos + x * sin +
-                    tr.position.y
-                ) as i16,
-            )
-        }
+    fn draw(&self, grid: &mut pixel::PixelGrid) {
+        let width = WIDTH as f32;
+        let height = HEIGHT as f32;
 
         // let precision_scale = 1.0;
-        let precision_scale = 2.0 - self.scale;
-        for x in 0..(width * precision_scale) as i16 {
-            for y in (0..(10.0 * precision_scale) as i16).chain(((height - 10.0) * precision_scale) as i16..(height * precision_scale) as i16) {
-                let transformed = transform(x as f32 / precision_scale, y as f32 / precision_scale, &self);
-                grid.set_pixel( transformed.0,
-                                transformed.1,
-                                &[0x00, 0x00, 0x00, self.alpha]);
+        let mut x = -width / 2.0;
+        while x < width / 2.0 {
+            for line_width in 0..10 {
+                grid.set_pixel_transformed( pixel::Vec2::new(x, -height / 2.0 + (line_width as f32) / self.transform.scale),
+                                            &self.transform,
+                                            &[0x00, 0x00, 0x00, 0xff]);
+                grid.set_pixel_transformed( pixel::Vec2::new(x, height / 2.0 - (line_width as f32) / self.transform.scale),
+                                            &self.transform,
+                                            &[0x00, 0x00, 0x00, 0xff]);
             }
+            x += self.transform.scale;
         }
-        for x in (0..(10.0 * precision_scale) as i16).chain(((width - 10.0) * precision_scale) as i16..(width * precision_scale) as i16) {
-            for y in (10.0 * precision_scale) as i16..((height - 10.0) * precision_scale) as i16 {
-                let transformed = transform(x as f32 / precision_scale, y as f32 / precision_scale, &self);
-                grid.set_pixel( transformed.0,
-                                transformed.1,
-                                &[0x00, 0x00, 0x00, self.alpha]);
+        let mut y = -height / 2.0;
+        while y < height / 2.0 {
+            for line_width in 0..10 {
+                grid.set_pixel_transformed( pixel::Vec2::new(-width / 2.0 + (line_width as f32) / self.transform.scale, y),
+                                            &self.transform,
+                                            &[0x00, 0x00, 0x00, 0xff]);
+                grid.set_pixel_transformed( pixel::Vec2::new(width / 2.0 - (line_width as f32) / self.transform.scale, y),
+                                            &self.transform,
+                                            &[0x00, 0x00, 0x00, 0xff]);
             }
+            y += self.transform.scale;
         }
+        // let y = 0;
+        // for x in (0..(10.0 * precision_scale) as i16).chain(((width - 10.0) * precision_scale) as i16..(width * precision_scale) as i16) {
+        //     for y in (10.0 * precision_scale) as i16..((height - 10.0) * precision_scale) as i16 {
+        //         let transformed = transform(x as f32 / precision_scale, y as f32 / precision_scale, &self);
+        //         grid.set_pixel( transformed.0,
+        //                         transformed.1,
+        //                         &[0x00, 0x00, 0x00, self.alpha]);
+        //     }
+        // }
 
         // for x in 0..(width * precision_scale) as i16 {
         //     for y in 0..(height * precision_scale) as i16 {
@@ -207,6 +194,15 @@ impl ScreenTransform {
         //                         transformed.1,
         //                         &[if (tex_x) as i16 % 100 > 50 {0xff} else {0x00}, if (tex_y) as i16 % 100 > 50 {0xff} else {0x00}, 0x00, self.alpha]);
         //     }
+        // }
+    }
+
+    fn mouse_input(&mut self, pos: Option<(f32, f32)>) {
+        // if let Some(pos) = pos {
+        //     let (x, y) = inverse_transform(pos.0, pos.1, self);
+        //     println!("{:?}, {:?}", x, y);
+        // } else {
+
         // }
     }
 }

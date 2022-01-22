@@ -18,10 +18,7 @@ const BOX_SIZE: i16 = 17;
 
 /// Representation of the application state. In this example, a box will bounce around the screen.
 struct World {
-    box_x: i16,
-    box_y: i16,
-    velocity_x: i16,
-    velocity_y: i16,
+    transforms: Vec<ScreenTransform>,
 }
 
 fn main() -> Result<(), Error> {
@@ -105,25 +102,21 @@ fn main() -> Result<(), Error> {
 impl World {
     /// Create a new `World` instance that can draw a moving box.
     fn new() -> Self {
+        let mut transforms = Vec::new();
+        transforms.push(ScreenTransform {
+            position: Vec2 { x: WIDTH as f32 / 2.0, y: HEIGHT as f32 / 2.0 },
+            rotation: 1.25,
+            scale: 0.6,
+            alpha: 0xff
+        });
         Self {
-            box_x: 23,
-            box_y: 16,
-            velocity_x: 10,
-            velocity_y: 10,
+            transforms,
         }
     }
 
-    /// Update the `World` internal state; bounce the box around the screen.
     fn update(&mut self) {
-        if self.box_x <= 0 || self.box_x + BOX_SIZE > WIDTH as i16 {
-            self.velocity_x *= -1;
-        }
-        if self.box_y <= 0 || self.box_y + BOX_SIZE > HEIGHT as i16 {
-            self.velocity_y *= -1;
-        }
-
-        self.box_x += self.velocity_x;
-        self.box_y += self.velocity_y;
+        // for mut transform in &mut self.transforms {
+        // }
     }
 
     /// Draw the `World` state to the frame buffer.
@@ -133,31 +126,9 @@ impl World {
         // Can extend to not have to make a new vec every time
         frame.copy_from_slice(clear_buffer);
         let mut grid = PixelGrid(frame);
-        // pixels.iter_mut().for_each(|pixel| pixel.copy_from_slice(&[0x48, 0xb2, 0xe8, 0xff]));
-        for inbox_x in 0..BOX_SIZE {
-            for inbox_y in 0..BOX_SIZE {
-                let x = self.box_x + inbox_x;
-                let y = self.box_y + inbox_y;
-                grid.set_pixel(x, y, &[0x5e, 0x48, 0xe8, 0xff]);
-            }
+        for transform in &self.transforms {
+            transform.draw(&mut grid);
         }
-        // for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
-        //     let x = (i % WIDTH as usize) as i16;
-        //     let y = (i / WIDTH as usize) as i16;
-
-        //     let inside_the_box = x >= self.box_x
-        //         && x < self.box_x + BOX_SIZE
-        //         && y >= self.box_y
-        //         && y < self.box_y + BOX_SIZE;
-
-        //     let rgba = if inside_the_box {
-        //         [0x5e, 0x48, 0xe8, 0xff]
-        //     } else {
-        //         [0x48, 0xb2, 0xe8, 0xff]
-        //     };
-
-        //     pixel.copy_from_slice(&rgba);
-        // }
     }
 }
 
@@ -184,3 +155,58 @@ struct ScreenTransform {
     alpha: u8,
 }
 
+impl ScreenTransform {
+    fn draw(&self, grid: &mut PixelGrid) {
+        let width = WIDTH as f32 * self.scale;
+        let height = HEIGHT as f32 * self.scale;
+
+        fn transform(x: f32, y: f32, tr: &ScreenTransform) -> (i16, i16) {
+            let width = WIDTH as f32 * tr.scale;
+            let height = HEIGHT as f32 * tr.scale;
+            let x = x - width / 2.0;
+            let y = y - height / 2.0;
+            let sin = tr.rotation.sin();
+            let cos = tr.rotation.cos();
+            (
+                (
+                    x * cos - y * sin +
+                    tr.position.x
+                ) as i16,
+                (
+                    y * cos + x * sin +
+                    tr.position.y
+                ) as i16,
+            )
+        }
+
+        // let precision_scale = 1.0;
+        let precision_scale = 2.0 - self.scale;
+        for x in 0..(width * precision_scale) as i16 {
+            for y in (0..(10.0 * precision_scale) as i16).chain(((height - 10.0) * precision_scale) as i16..(height * precision_scale) as i16) {
+                let transformed = transform(x as f32 / precision_scale, y as f32 / precision_scale, &self);
+                grid.set_pixel( transformed.0,
+                                transformed.1,
+                                &[0x00, 0x00, 0x00, self.alpha]);
+            }
+        }
+        for x in (0..(10.0 * precision_scale) as i16).chain(((width - 10.0) * precision_scale) as i16..(width * precision_scale) as i16) {
+            for y in (10.0 * precision_scale) as i16..((height - 10.0) * precision_scale) as i16 {
+                let transformed = transform(x as f32 / precision_scale, y as f32 / precision_scale, &self);
+                grid.set_pixel( transformed.0,
+                                transformed.1,
+                                &[0x00, 0x00, 0x00, self.alpha]);
+            }
+        }
+
+        // for x in 0..(width * precision_scale) as i16 {
+        //     for y in 0..(height * precision_scale) as i16 {
+        //         let tex_x = x as f32 / width / precision_scale * WIDTH as f32;
+        //         let tex_y = y as f32 / height / precision_scale * HEIGHT as f32;
+        //         let transformed = transform(x as f32 / precision_scale, y as f32 / precision_scale, &self);
+        //         grid.set_pixel( transformed.0,
+        //                         transformed.1,
+        //                         &[if (tex_x) as i16 % 100 > 50 {0xff} else {0x00}, if (tex_y) as i16 % 100 > 50 {0xff} else {0x00}, 0x00, self.alpha]);
+        //     }
+        // }
+    }
+}

@@ -38,13 +38,20 @@ impl Transform {
 		let point = point + self.position;
 		point
 	}
+
+	pub fn apply_inverse(&self, point: Vec2) -> Vec2 {
+		let point = point - self.position;
+		let point = point.rotate(-self.rotation);
+		let point = point / self.scale;
+		point
+	}
 }
 
 // Vec2
 #[derive(Copy, Clone)]
 pub struct Vec2 {
-    x: f32,
-    y: f32,
+    pub x: f32,
+    pub y: f32,
 }
 
 impl Vec2 {
@@ -58,6 +65,14 @@ impl Vec2 {
 		Self {
 			x: self.x * cos - self.y * sin,
 			y: self.y * cos + self.x * sin,
+		}
+	}
+
+	pub fn normalized(&self) -> Self {
+		let magnitude = (self.x * self.x + self.y * self.y).sqrt();
+		Self {
+			x: self.x / magnitude,
+			y: self.y / magnitude,
 		}
 	}
 }

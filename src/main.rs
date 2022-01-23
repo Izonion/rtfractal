@@ -18,9 +18,15 @@ const HEIGHT: u32 = 1000;
 // const HEIGHT: u32 = 240;
 const BOX_SIZE: i16 = 17;
 
+#[derive(Eq, PartialEq, Copy, Clone)]
+enum WorldHoverMode {
+	Add,
+}
+
 /// Representation of the application state. In this example, a box will bounce around the screen.
 struct World {
 	transforms: Vec<ScreenTransform>,
+	hovering: Option<WorldHoverMode>,
 }
 
 #[derive(Eq, PartialEq, Copy, Clone)]
@@ -140,7 +146,7 @@ fn main() -> Result<(), Error> {
 	});
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 enum MouseClickState {
 	Pressed,
 	Held,
@@ -152,22 +158,23 @@ impl World {
 	/// Create a new `World` instance that can draw a moving box.
 	fn new() -> Self {
 		let mut transforms = Vec::new();
-		for _ in 0..3 {
 		transforms.push(ScreenTransform { transform: pixel::Transform {
 				position: pixel::Vec2::new(WIDTH as f32 / 2.0, HEIGHT as f32 / 2.0),
 				rotation: 0.0,
 				scale: 0.6,
 				alpha: 0xf0,
-			}, hovering: None, grabbing: None, scale_start: None, controls_visible: false});
-		}
+			}, hovering: None, grabbing: None, scale_start: None, controls_visible: false, dead: false});
 		Self {
 			transforms,
+			hovering: None,
 		}
 	}
 
 	fn update(&mut self, mouse_pos: Option<(f32, f32)>, mouse_state: MouseClickState) {
 		let mut first_one = None;
+		let mut dead_ones = Vec::new();
 		for (i, transform) in self.transforms.iter_mut().enumerate() {
+			if transform.dead { dead_ones.push(i); }
 			if let Some((x, y)) = mouse_pos {
 				if transform.mouse_input(pixel::Vec2::new(x, y), mouse_state) {
 					first_one = Some(i);
@@ -178,6 +185,27 @@ impl World {
 		if let Some(i) = first_one {
 			let top = self.transforms.remove(i);
 			self.transforms.insert(0, top);
+		}
+		for dead_one in dead_ones { self.transforms.remove(dead_one); }
+
+		if let Some(mouse_pos) = mouse_pos {
+			if 		mouse_pos.0 > 20.0 &&
+					mouse_pos.0 < 80.0 &&
+					mouse_pos.1 > 20.0 &&
+					mouse_pos.1 < 80.0 {
+				self.hovering = Some(WorldHoverMode::Add);
+			} else {
+				self.hovering = None;
+			}
+		}
+		if self.hovering.is_some() && mouse_state == MouseClickState::Pressed {
+			self.transforms.push(ScreenTransform { transform: pixel::Transform {
+					position: pixel::Vec2::new(	WIDTH as f32 / 2.0 - rand::random::<f32>() * 100.0 + 50.0,
+												HEIGHT as f32 / 2.0 - rand::random::<f32>() * 100.0 + 50.0),
+					rotation: rand::random::<f32>() * 0.1 - 0.05,
+					scale: rand::random::<f32>() * 0.1 + 0.495,
+					alpha: 0xf0,
+				}, hovering: None, grabbing: None, scale_start: None, controls_visible: false, dead: false});
 		}
 	}
 
@@ -200,6 +228,18 @@ impl World {
 		}
 		if edit_mode == EditMode::Dual || edit_mode == EditMode::Edit {
 			let mut grid = pixel::PixelGrid(frame);
+			let add_color =
+						if self.hovering == Some(WorldHoverMode::Add) { &HOVERING_COLOR }
+						else { &HOVERABLE_COLOR };
+			for x in 43..57 {
+				for y in 20..80 {
+					grid.set_pixel( pixel::Vec2::new(x as f32, y as f32),
+												&add_color);
+					grid.set_pixel( pixel::Vec2::new(y as f32, x as f32),
+												&add_color);
+				}
+			}
+
 			for transform in &self.transforms {
 				transform.draw(&mut grid);
 			}
@@ -222,17 +262,20 @@ struct ScreenTransform {
 	hovering: Option<Hoverables>,
 	grabbing: Option<Hoverables>,
 	scale_start: Option<pixel::Vec2>,
+	dead: bool,
 }
+
+const UNHOVERABLE_COLOR: [u8; 3] = [0x13, 0x1B, 0x23];
+const HOVERABLE_COLOR: [u8; 3] = [0xA6, 0x26, 0x39];
+const HOVERING_COLOR: [u8; 3] = [0xDB, 0x32, 0x4D];
+const CLICKING_COLOR: [u8; 3] = [0x85, 0x1E, 0x2E];
 
 impl ScreenTransform {
 	fn draw(&self, grid: &mut pixel::PixelGrid) {
 		let width = WIDTH as f32;
 		let height = HEIGHT as f32;
 
-		let unhoverable_color = [0x13, 0x1B, 0x23];
-		let hoverable_color = [0xA6, 0x26, 0x39];
-		let hovering_color = [0xDB, 0x32, 0x4D];
-		let clicking_color = [0x85, 0x1E, 0x2E];
+
 
 		// let precision_scale = 1.0;
 		let mut x = -width / 2.0;
@@ -240,10 +283,10 @@ impl ScreenTransform {
 			for line_width in 0..10 {
 				grid.set_pixel_transformed( pixel::Vec2::new(x, -height / 2.0 + (line_width as f32) / self.transform.scale),
 											&self.transform,
-											&unhoverable_color);
+											&UNHOVERABLE_COLOR);
 				grid.set_pixel_transformed( pixel::Vec2::new(x, height / 2.0 - (line_width as f32) / self.transform.scale),
 											&self.transform,
-											&unhoverable_color);
+											&UNHOVERABLE_COLOR);
 			}
 			x += self.transform.scale;
 		}
@@ -252,10 +295,10 @@ impl ScreenTransform {
 			for line_width in 0..10 {
 				grid.set_pixel_transformed( pixel::Vec2::new(-width / 2.0 + (line_width as f32) / self.transform.scale, y),
 											&self.transform,
-											&unhoverable_color);
+											&UNHOVERABLE_COLOR);
 				grid.set_pixel_transformed( pixel::Vec2::new(width / 2.0 - (line_width as f32) / self.transform.scale, y),
 											&self.transform,
-											&unhoverable_color);
+											&UNHOVERABLE_COLOR);
 			}
 			y += self.transform.scale;
 		}
@@ -263,9 +306,9 @@ impl ScreenTransform {
 		if !self.controls_visible { return }
 
 		let rotate_color =
-			if self.grabbing == Some(Hoverables::Rotate) { &clicking_color }
-			else if self.hovering == Some(Hoverables::Rotate) { &hovering_color }
-			else { &hoverable_color };
+			if self.grabbing == Some(Hoverables::Rotate) { &CLICKING_COLOR }
+			else if self.hovering == Some(Hoverables::Rotate) { &HOVERING_COLOR }
+			else { &HOVERABLE_COLOR };
 		for x in -75..75 {
 			let outer_arc = (100.0*100.0 - x as f32 * x as f32).sqrt() as i16;
 			let inner_arc = (75.0*75.0 - x as f32 * x as f32).sqrt() as i16;
@@ -287,9 +330,9 @@ impl ScreenTransform {
 		}
 
 		let translate_color =
-			if self.grabbing == Some(Hoverables::Translate) { &clicking_color }
-			else if self.hovering == Some(Hoverables::Translate) { &hovering_color }
-			else { &hoverable_color };
+			if self.grabbing == Some(Hoverables::Translate) { &CLICKING_COLOR }
+			else if self.hovering == Some(Hoverables::Translate) { &HOVERING_COLOR }
+			else { &HOVERABLE_COLOR };
 		for x in -10..10 {
 			for y in -40..40 {
 				grid.set_pixel_transformed( pixel::Vec2::new(x as f32, y as f32),
@@ -318,9 +361,9 @@ impl ScreenTransform {
 		}
 
 		let scale_color =
-			if self.grabbing == Some(Hoverables::Scale) { &clicking_color }
-			else if self.hovering == Some(Hoverables::Scale) { &hovering_color }
-			else { &hoverable_color };
+			if self.grabbing == Some(Hoverables::Scale) { &CLICKING_COLOR }
+			else if self.hovering == Some(Hoverables::Scale) { &HOVERING_COLOR }
+			else { &HOVERABLE_COLOR };
 		for x in 0..80 {
 			for y in 60..80 {
 				grid.set_pixel_transformed( pixel::Vec2::new(x as f32 + width / 2.0 - 80.0 - 15.0 / self.transform.scale, y as f32 + height / 2.0 - 80.0 - 15.0 / self.transform.scale),
@@ -332,10 +375,25 @@ impl ScreenTransform {
 			}
 		}
 
-		let scale_color =
-			if self.grabbing == Some(Hoverables::Delete) { &clicking_color }
-			else if self.hovering == Some(Hoverables::Delete) { &hovering_color }
-			else { &hoverable_color };
+		let delete_color =
+			if self.grabbing == Some(Hoverables::Delete) { &CLICKING_COLOR }
+			else if self.hovering == Some(Hoverables::Delete) { &HOVERING_COLOR }
+			else { &HOVERABLE_COLOR };
+		for x in 30..50 {
+			for y in -40..40 {
+				let x = x as f32;
+				let y = y as f32;
+				grid.set_pixel_transformed( pixel::Vec2::new((x + y) / 2.0 - width / 2.0 + 15.0 / self.transform.scale,
+															 (x - y) / 2.0 - height / 2.0 + 15.0 / self.transform.scale),
+											&self.transform,
+											&delete_color);
+				grid.set_pixel_transformed( pixel::Vec2::new((y + x) / 2.0 - width / 2.0 + 15.0 / self.transform.scale,
+															 (y - x) / 2.0 + 40.0 - height / 2.0 + 15.0 / self.transform.scale),
+											&self.transform,
+											&delete_color);
+			}
+		}
+
 	}
 
 	fn mouse_input(&mut self, pos: pixel::Vec2, mouse_state: MouseClickState) -> bool {
@@ -414,6 +472,17 @@ impl ScreenTransform {
 					MouseClickState::Pressed => {
 						self.grabbing = Some(Hoverables::Scale);
 						self.scale_start = Some(pos);
+					},
+					_ => (),
+				}
+			} else if 	local_pos.x > -width / 2.0 + 15.0 / self.transform.scale &&
+						local_pos.x < -width / 2.0 + 50.0 + 15.0 / self.transform.scale &&
+						local_pos.y > -height / 2.0 + 15.0 / self.transform.scale &&
+						local_pos.y < -height / 2.0 + 50.0 + 15.0 / self.transform.scale {
+				self.hovering = Some(Hoverables::Delete);
+				match mouse_state {
+					MouseClickState::Pressed => {
+						self.dead = true;
 					},
 					_ => (),
 				}

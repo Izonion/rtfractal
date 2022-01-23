@@ -9,7 +9,7 @@ impl<'a> PixelGrid<'a> {
 		let x = point.x.clamp(0.0, (WIDTH - 1) as f32) as u32;
 		let y = point.y.clamp(0.0, (HEIGHT - 1) as f32) as u32;
 		let i = (x as usize + (y * WIDTH) as usize) * 4;
-		self.0[i..i + 2].copy_from_slice(pixel);
+		self.0[i..i + 3].copy_from_slice(pixel);
 	}
 
 	pub fn set_pixel_transformed(&mut self, point: Vec2, transform: &Transform, pixel: &[u8; 3]) {

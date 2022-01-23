@@ -12,8 +12,8 @@ use std::time::{Instant, Duration};
 
 mod pixel;
 
-const WIDTH: u32 = 800;
-const HEIGHT: u32 = 600;
+const WIDTH: u32 = 1000;
+const HEIGHT: u32 = 1000;
 // const WIDTH: u32 = 320;
 // const HEIGHT: u32 = 240;
 const BOX_SIZE: i16 = 17;
@@ -37,7 +37,7 @@ fn main() -> Result<(), Error> {
 	let window = {
 		let size = LogicalSize::new(WIDTH as f64, HEIGHT as f64);
 		WindowBuilder::new()
-			.with_title("Hello Pixels")
+			.with_title("Fractalical")
 			.with_inner_size(size)
 			.with_min_inner_size(size)
 			.build(&event_loop)
@@ -51,27 +51,21 @@ fn main() -> Result<(), Error> {
 	};
 	let mut world = World::new();
 
-	let clear_buffer = {
-		let mut clear_buffer = [0u8; (WIDTH * HEIGHT * 4) as usize];
-		for i in 0..(WIDTH * HEIGHT) as usize {
-			let x = (i % WIDTH as usize) as u32;
-			let y = (i / WIDTH as usize) as u32;
-			if x > WIDTH * 4 / 10 && x < WIDTH * 6 / 10 &&
-				y > HEIGHT * 4 / 10 && y < HEIGHT * 6 / 10 {
-				clear_buffer[i * 4..i * 4 + 4].copy_from_slice(&[0x23, 0xA9, 0x50, 0xff]);
-			} else {
-				clear_buffer[i * 4..i * 4 + 4].copy_from_slice(&[0xE3, 0xE3, 0xE3, 0xff]);
-			}
+	let mut clear_buffer = Box::new([0u8; (WIDTH * HEIGHT * 4) as usize]);
+	for i in 0..(WIDTH * HEIGHT) as usize {
+		let x = (i % WIDTH as usize) as u32;
+		let y = (i / WIDTH as usize) as u32;
+		if x > WIDTH * 4 / 10 && x < WIDTH * 6 / 10 &&
+			y > HEIGHT * 4 / 10 && y < HEIGHT * 6 / 10 {
+			clear_buffer[i * 4..i * 4 + 4].copy_from_slice(&[0x23, 0xA9, 0x50, 0xff]);
+		} else {
+			clear_buffer[i * 4..i * 4 + 4].copy_from_slice(&[0xE3, 0xE3, 0xE3, 0xff]);
 		}
-		Box::new(clear_buffer) as Box<[u8]>
-	};
+	}
 
-	let mut last_frame_buffer = {
-		let mut clear_buffer = [0u8; (WIDTH * HEIGHT * 4) as usize];
-		Box::new(clear_buffer) as Box<[u8]>
-	};
+	let mut last_frame_buffer = Box::new([0u8; (WIDTH * HEIGHT * 4) as usize]);
 
-	let mut edit_mode = EditMode::Edit;
+	let mut edit_mode = EditMode::Dual;
 
 	let mut last_frame = Instant::now();
 	let mut cumulative_delta = Duration::from_secs_f64(0.0);
@@ -190,8 +184,8 @@ impl World {
 	/// Draw the `World` state to the frame buffer.
 	///
 	/// Assumes the default texture format: `wgpu::TextureFormat::Rgba8UnormSrgb`
-	fn draw(&self, clear_buffer: &Box<[u8]>, frame: &mut [u8], last_frame_buffer: &mut Box<[u8]>, edit_mode: EditMode) {
-		frame.copy_from_slice(clear_buffer);
+	fn draw(&self, clear_buffer: &Box<[u8; (WIDTH * HEIGHT * 4) as usize]>, frame: &mut [u8], last_frame_buffer: &mut Box<[u8; (WIDTH * HEIGHT * 4) as usize]>, edit_mode: EditMode) {
+		frame.copy_from_slice(&clear_buffer[..]);
 		if edit_mode == EditMode::Dual || edit_mode == EditMode::View {
 			let mut grid = pixel::PixelGrid(frame);
 			for (i, pixel) in last_frame_buffer.chunks_exact_mut(4).enumerate() {
@@ -219,6 +213,7 @@ enum Hoverables {
 	Translate,
 	Scale,
 	Alpha,
+	Delete,
 }
 
 struct ScreenTransform {
@@ -336,6 +331,11 @@ impl ScreenTransform {
 											&scale_color);
 			}
 		}
+
+		let scale_color =
+			if self.grabbing == Some(Hoverables::Delete) { &clicking_color }
+			else if self.hovering == Some(Hoverables::Delete) { &hovering_color }
+			else { &hoverable_color };
 	}
 
 	fn mouse_input(&mut self, pos: pixel::Vec2, mouse_state: MouseClickState) -> bool {

@@ -23,6 +23,13 @@ struct World {
 	transforms: Vec<ScreenTransform>,
 }
 
+#[derive(Eq, PartialEq, Copy, Clone)]
+enum EditMode {
+	Dual,
+	Edit,
+	View,
+}
+
 fn main() -> Result<(), Error> {
 	env_logger::init();
 	let event_loop = EventLoop::new();
@@ -47,10 +54,24 @@ fn main() -> Result<(), Error> {
 	let clear_buffer = {
 		let mut clear_buffer = [0u8; (WIDTH * HEIGHT * 4) as usize];
 		for i in 0..(WIDTH * HEIGHT) as usize {
-			clear_buffer[i * 4..i * 4 + 4].copy_from_slice(&[0xE3, 0xE3, 0xE3, 0xff]);
+			let x = (i % WIDTH as usize) as u32;
+			let y = (i / WIDTH as usize) as u32;
+			if x > WIDTH * 4 / 10 && x < WIDTH * 6 / 10 &&
+				y > HEIGHT * 4 / 10 && y < HEIGHT * 6 / 10 {
+				clear_buffer[i * 4..i * 4 + 4].copy_from_slice(&[0x23, 0xA9, 0x50, 0xff]);
+			} else {
+				clear_buffer[i * 4..i * 4 + 4].copy_from_slice(&[0xE3, 0xE3, 0xE3, 0xff]);
+			}
 		}
 		Box::new(clear_buffer) as Box<[u8]>
 	};
+
+	let mut last_frame_buffer = {
+		let mut clear_buffer = [0u8; (WIDTH * HEIGHT * 4) as usize];
+		Box::new(clear_buffer) as Box<[u8]>
+	};
+
+	let mut edit_mode = EditMode::Edit;
 
 	let mut last_frame = Instant::now();
 	let mut cumulative_delta = Duration::from_secs_f64(0.0);
@@ -59,7 +80,7 @@ fn main() -> Result<(), Error> {
 	event_loop.run(move |event, _, control_flow| {
 		// Draw the current frame
 		if let Event::RedrawRequested(_) = event {
-			world.draw(&clear_buffer, pixels.get_frame());
+			world.draw(&clear_buffer, pixels.get_frame(), &mut last_frame_buffer, edit_mode);
 			if pixels
 				.render()
 				.map_err(|e| error!("pixels.render() failed: {}", e))
@@ -87,6 +108,12 @@ fn main() -> Result<(), Error> {
 			if input.key_pressed(VirtualKeyCode::Escape) || input.quit() {
 				*control_flow = ControlFlow::Exit;
 				return;
+			} else if input.key_pressed(VirtualKeyCode::Key1) {
+				edit_mode = EditMode::Dual;
+			} else if input.key_pressed(VirtualKeyCode::Key2) {
+				edit_mode = EditMode::Edit;
+			} else if input.key_pressed(VirtualKeyCode::Key3) {
+				edit_mode = EditMode::View;
 			}
 
 			// Resize the window
@@ -111,7 +138,9 @@ fn main() -> Result<(), Error> {
 			} else { None };
 
 			// Update internal state and request a redraw
-			world.update(mouse_pos, mouse_state);
+			if edit_mode != EditMode::View {
+				world.update(mouse_pos, mouse_state);
+			}
 			window.request_redraw();
 		}
 	});
@@ -129,12 +158,12 @@ impl World {
 	/// Create a new `World` instance that can draw a moving box.
 	fn new() -> Self {
 		let mut transforms = Vec::new();
-		for _ in 0..4 {
+		for _ in 0..3 {
 		transforms.push(ScreenTransform { transform: pixel::Transform {
 				position: pixel::Vec2::new(WIDTH as f32 / 2.0, HEIGHT as f32 / 2.0),
 				rotation: 0.0,
 				scale: 0.6,
-				alpha: 0xff,
+				alpha: 0xf0,
 			}, hovering: None, grabbing: None, scale_start: None, controls_visible: false});
 		}
 		Self {
@@ -161,12 +190,25 @@ impl World {
 	/// Draw the `World` state to the frame buffer.
 	///
 	/// Assumes the default texture format: `wgpu::TextureFormat::Rgba8UnormSrgb`
-	fn draw(&self, clear_buffer: &Box<[u8]>, frame: &mut [u8]) {
-		// Can extend to not have to make a new vec every time
+	fn draw(&self, clear_buffer: &Box<[u8]>, frame: &mut [u8], last_frame_buffer: &mut Box<[u8]>, edit_mode: EditMode) {
 		frame.copy_from_slice(clear_buffer);
-		let mut grid = pixel::PixelGrid(frame);
-		for transform in &self.transforms {
-			transform.draw(&mut grid);
+		if edit_mode == EditMode::Dual || edit_mode == EditMode::View {
+			let mut grid = pixel::PixelGrid(frame);
+			for (i, pixel) in last_frame_buffer.chunks_exact_mut(4).enumerate() {
+				if pixel[0] == 0xE3 { continue; }
+				let x = (i % WIDTH as usize) as f32 - WIDTH as f32 / 2.0;
+				let y = (i / WIDTH as usize) as f32 - HEIGHT as f32 / 2.0;
+				for transform in &self.transforms {
+					grid.set_pixel_transformed(pixel::Vec2::new(x, y), &transform.transform, &[pixel[0], pixel[1], pixel[2]]);
+				}
+			}
+			last_frame_buffer.copy_from_slice(frame);
+		}
+		if edit_mode == EditMode::Dual || edit_mode == EditMode::Edit {
+			let mut grid = pixel::PixelGrid(frame);
+			for transform in &self.transforms {
+				transform.draw(&mut grid);
+			}
 		}
 	}
 }

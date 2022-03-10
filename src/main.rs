@@ -43,7 +43,7 @@ fn main() -> Result<(), Error> {
 	let window = {
 		let size = LogicalSize::new(WIDTH as f64, HEIGHT as f64);
 		WindowBuilder::new()
-			.with_title("Fractalical")
+			.with_title("Fractorio")
 			.with_inner_size(size)
 			.with_min_inner_size(size)
 			.build(&event_loop)
@@ -61,8 +61,15 @@ fn main() -> Result<(), Error> {
 	for i in 0..(WIDTH * HEIGHT) as usize {
 		let x = (i % WIDTH as usize) as u32;
 		let y = (i / WIDTH as usize) as u32;
-		if x > WIDTH * 4 / 10 && x < WIDTH * 6 / 10 &&
-			y > HEIGHT * 4 / 10 && y < HEIGHT * 6 / 10 {
+		// if x > WIDTH * 4 / 10 && x < WIDTH * 6 / 10 &&
+			// y > HEIGHT * 4 / 10 && y < HEIGHT * 6 / 10 {
+		let x = x as f32 - WIDTH as f32 / 2.0;
+		let y = y as f32 - HEIGHT as f32 / 2.0;
+		let scale = 200.0;
+		if 	x > -0.5 * scale && x < 0.5 * scale &&
+			y < 0.0 * scale && y > -(3.0f32.sqrt() / 2.0) * scale &&
+			y > -3.0f32.sqrt() * (x / scale + 0.5) * scale &&
+			y > -(-3.0f32.sqrt() * (x / scale - 0.5) * scale) {
 			clear_buffer[i * 4..i * 4 + 4].copy_from_slice(&[0x23, 0xA9, 0x50, 0xff]);
 		} else {
 			clear_buffer[i * 4..i * 4 + 4].copy_from_slice(&[0xE3, 0xE3, 0xE3, 0xff]);
@@ -154,6 +161,7 @@ enum MouseClickState {
 	Idle,
 }
 
+const T_SCALE: f32 = 0.5436890127;
 impl World {
 	/// Create a new `World` instance that can draw a moving box.
 	fn new() -> Self {
@@ -161,7 +169,7 @@ impl World {
 		transforms.push(ScreenTransform { transform: pixel::Transform {
 				position: pixel::Vec2::new(WIDTH as f32 / 2.0, HEIGHT as f32 / 2.0),
 				rotation: 0.0,
-				scale: 0.6,
+				scale: T_SCALE,
 				alpha: 0xf0,
 			}, hovering: None, grabbing: None, scale_start: None, controls_visible: false, dead: false});
 		Self {
@@ -200,10 +208,14 @@ impl World {
 		}
 		if self.hovering.is_some() && mouse_state == MouseClickState::Pressed {
 			self.transforms.push(ScreenTransform { transform: pixel::Transform {
-					position: pixel::Vec2::new(	WIDTH as f32 / 2.0 - rand::random::<f32>() * 100.0 + 50.0,
-												HEIGHT as f32 / 2.0 - rand::random::<f32>() * 100.0 + 50.0),
-					rotation: rand::random::<f32>() * 0.1 - 0.05,
-					scale: rand::random::<f32>() * 0.1 + 0.495,
+					// position: pixel::Vec2::new(	WIDTH as f32 / 2.0 - rand::random::<f32>() * 100.0 + 50.0,
+					// 							HEIGHT as f32 / 2.0 - rand::random::<f32>() * 100.0 + 50.0),
+					// rotation: rand::random::<f32>() * 0.1 - 0.05,
+					// scale: rand::random::<f32>() * 0.1 + 0.495,
+					position: pixel::Vec2::new(	WIDTH as f32 / 2.0,
+												HEIGHT as f32 / 2.0),
+					rotation: 0.0,
+					scale: T_SCALE,
 					alpha: 0xf0,
 				}, hovering: None, grabbing: None, scale_start: None, controls_visible: false, dead: false});
 		}
